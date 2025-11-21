@@ -1,0 +1,62 @@
+plugin load libdeepmd_lmp.so
+
+# Initialize simulation
+units metal
+atom_style charge
+atom_modify map yes # Necessary for compute simpleHessian
+boundary p p p
+
+# Read structure
+read_data data_updated3.lmp
+
+neigh_modify one 3000
+
+# Potential
+pair_style deepmd ./compressedAug21.pth
+pair_coeff * *
+
+pair_modify table 0
+
+neighbor 2.0 bin
+neigh_modify every 2 delay 0 check no
+
+# Minimization
+#min_style cg
+#min_modify dmax 0.1 line quadratic
+timestep 0.001
+
+#minimize 1.0e-8 1.0e-10 10000 500000
+
+# MD settings
+# Dump
+dump 1 all custom 1 NewProd_5v4.lammpstrj id type x y z vx vy vz
+dump_modify 1 format float %20.9g
+dump_modify 1 sort id
+
+# --- Define groups ---
+group solute id 1:12
+group solvent subtract all solute
+group hessianatoms id 1 2 3 4 5 9
+# Integration fix
+fix 1 all nvt temp 298.0 298.0 0.05
+#fix 1 all npt temp 300.0 300.0 1.0 iso 1.0 1.0 1.0
+
+# Save restart files
+#restart 100000 restart.*.lmp
+
+# --- Recenter fix ---
+fix 2 solute recenter INIT INIT INIT shift all
+
+# --- Hessian Calculation ---
+# Compute Hessian for the 'solute' group
+# Epsilon: 0.01 (adjust as needed)
+# Output file: solute_hessian9.dat
+# Output frequency: 2 (adjust as needed)
+compute HESS hessianatoms simpleHessian 0.01 solute_hessian9.dat 2
+thermo 100
+thermo_style custom step temp pe etotal cpu spcpu
+
+fix HESS_invoke all ave/time 2 1 2 c_HESS[1] file hess_dummy_output.log
+
+# Run
+run 2500000
